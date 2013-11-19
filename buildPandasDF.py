@@ -217,7 +217,6 @@ def get_other_ratings(gameName, user, df):
 #"get the sorted top 5 games for a user by the rating the user gave them"
 def get_user_top_choices(user, df, numchoices=5):
     udf=df[df.user==user][['gameName','rating']].sort(['rating'], ascending=False)
-    print 'udf\n', udf
     return udf.head(numchoices)
 
 
@@ -240,8 +239,8 @@ def buildDfFromScrapedCsvs():
     return fullDf
 #fullDf=buildDfFromScrapedCsvs()
 ##Save the dataframe or load from csv
-#fullDf.to_csv('fullGamesDf.csv')
-fullDf=pd.read_csv('fullGamesDf.csv')
+#fullDf.to_csv('google_drive/fullGamesDf.csv')
+fullDf=pd.read_csv('google_drive/fullGamesDf.csv')
 
 #create a smaller dataframe containing only the ratings by users with 13 or more ratings 
 #(number chosen arbitrarily)
@@ -252,11 +251,11 @@ smallDf=recompute_frame(smallDf)
 
 # db=Database(smallDf)
 # db.populate_by_calculating(pearson_sim)
-# fout=open('gameDbPickle','w')
+# fout=open('google_drive/gameDbPickle','w')
 # pickle.dump(db,fout)
 # fout.close()
 
-fin=open('gameDbPickle','r')
+fin=open('google_drive/gameDbPickle','r')
 db=pickle.load(fin)
 fin.close()
 
