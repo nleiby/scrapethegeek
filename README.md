@@ -10,3 +10,11 @@ Link your Google Drive folder, so we can do training on large data files there. 
 ```
 ln -s ~/Google\ Drive/ google_drive
 ```
+
+To do:
+Make predictions about new games coming out based on game features and the early votes, and push recommendations to people
+(newsletter for people who have 
+
+Boardgamegeek recommendations- not very good.  Quantify how much better our system is to theirs.
+Access their recommendations in this format:
+http://boardgamegeek.com/user/nicodemus055/recommendations
