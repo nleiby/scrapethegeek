@@ -18,3 +18,4 @@ Make predictions about new games coming out based on game features and the early
 Boardgamegeek recommendations- not very good.  Quantify how much better our system is to theirs.
 Access their recommendations in this format:
 http://boardgamegeek.com/user/nicodemus055/recommendations
+Use a dummy account 'scrapeTheGeek' to query other peoples' recs- need to be logged in (cookies) to see recs
