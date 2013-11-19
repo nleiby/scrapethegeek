@@ -3,6 +3,7 @@ from pattern import web
 import requests
 import pandas as pd
 import numpy as np
+import os
 
 
 
@@ -52,7 +53,7 @@ def getRatingsFromReviewPage(dom,gameID):
         users.append(review.attributes['username'])
         gameNames.append(gameName)
         gameIDs.append(gameID)
-    reviewDict={'user':users,'rating':ratings,'gameName':gameNames,'gameIDs':gameIDs}
+    reviewDict={'user':users,'rating':ratings,'gameName':gameNames,'gameID':gameIDs}
     df=pd.DataFrame(reviewDict)
     return df
 
@@ -107,3 +108,7 @@ for game in top100_IDs:
     gameDf=buildReviewDfForGame(gameID)
     print 'saving file: ', fileName
     gameDf.to_csv(fileName,index_label=False, encoding='utf8')
+
+
+
+
