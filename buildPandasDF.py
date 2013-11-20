@@ -40,6 +40,21 @@ def pearson_sim(game1_reviews, game2_reviews, n_common):
         rho=pearsonr(diff1, diff2)[0]
     return rho
 
+#alternative similarity metric for 2 games
+#compute cosine similarity of v1 to v2: (v1 dot v1)/{||v1||*||v2||)
+def cosine_similarity(game1_reviews, game2_reviews, n_common):
+    v1=game1_reviews['rating'].values
+    v2=game2_reviews['rating'].values
+    sumxx, sumxy, sumyy = 0, 0, 0
+    for i in range(len(v1)):
+        x = v1[i]; y = v2[i]
+        sumxx += x*x
+        sumyy += y*y
+        sumxy += x*y
+    return sumxy/math.sqrt(sumxx*sumyy)
+
+
+
 #Calculates the similarity between 2 games using a provided similarity metric
 #takes as arguments the 2 gameNames, the dataframe to use, and a function to calculate similarity
 def calculate_similarity(game1,game2,df,similarity_func):
