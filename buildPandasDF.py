@@ -102,10 +102,15 @@ class Database:
     def populate_by_calculating(self, similarity_func):
         # a populator for every pair of games in df. takes similarity_func like
         # pearson_sim as argument
-      
-        items=self.gameNames.items()
+        counter=0
+        items=self.gameNames.items()    
+        totalComparisons=len(items)**2
+
         for g1, i1 in items:
             for g2, i2 in items:
+                counter+=1
+                if counter%100==0:
+                    print counter, totalComparisons
                 if i1 < i2:
                     sim, nsup=calculate_similarity(g1, g2, self.df, similarity_func)
                     self.database_sim[i1][i2]=sim
@@ -238,28 +243,38 @@ def get_user_top_choices(user, df, numchoices=5):
 
 #Build a pandas database fullDf from all of the individual game ratings csvs saved
 def buildDfFromScrapedCsvs():
-    dataDir='gameRatings/'
+    dataDir='google_drive/gameRatings/'
     gameRatingsFiles=os.listdir(dataDir)
-    if '.DS_Store' in gameRatingsFiles:
-            gameRatingsFiles.remove('.DS_Store')
+
     fullDf=pd.DataFrame()
 
     for file in gameRatingsFiles:
-        filePath=dataDir+file
-        df=pd.read_csv(filePath)
-        fullDf=pd.concat([fullDf,df],ignore_index=True)
+        if file.endswith('.csv'):
+            filePath=dataDir+file
+            df=pd.read_csv(filePath)
+            df.columns = ['gameID','gameName','rating','user']
+            fullDf=pd.concat([fullDf,df],ignore_index=True)
     print 'Built fullDf:\n',fullDf.head(),'\n', fullDf
 
+    #Some rare users rate games more than once.  This keeps their first rating
+    fullDf=fullDf.drop_duplicates(cols=['user','gameName'], take_last=False, inplace=False)
     fullDf=recompute_frame(fullDf)
     return fullDf
-#fullDf=buildDfFromScrapedCsvs()
+fullDf=buildDfFromScrapedCsvs()
+#deal with the fact that some idiot put a comma in their username and some idiot database allowed it
+fullDf['user']=fullDf['user'].map(lambda x: x.replace(',',' '))
+
 ##Save the dataframe or load from csv
-#fullDf.to_csv('google_drive/fullGamesDf.csv')
-fullDf=pd.read_csv('google_drive/fullGamesDf.csv')
+fullDf.to_csv('google_drive/fullGamesDf.csv',index=False)
+#fullDf=pd.read_csv('google_drive/fullGamesDf.csv')
+
+#Exports a csv containing only the columns I want to pass to computeSimMrjob
+subsetoffull=fullDf[['user','gameID', 'rating','game_avg','user_avg']]
+subsetoffull.to_csv("subset-full.csv", index=False, header=False)
 
 #create a smaller dataframe containing only the ratings by users with 13 or more ratings 
 #(number chosen arbitrarily)
-smallDf=fullDf[fullDf.user_review_count>=13]
+smallDf=fullDf[fullDf.user_review_count>=25]
 smallDf=recompute_frame(smallDf)
 
 
@@ -270,33 +285,33 @@ smallDf=recompute_frame(smallDf)
 # pickle.dump(db,fout)
 # fout.close()
 
-fin=open('google_drive/gameDbPickle','r')
-db=pickle.load(fin)
-fin.close()
+# #fin=open('google_drive/gameDbPickle','r')
+# #db=pickle.load(fin)
+# #fin.close()
 
-#define some variables for function testing
-testGame1='Mage Wars'
-testGame2='Terra Mystica'
-testuser="m4c14s"
-print 'the database and this function should return the same values'
-print calculate_similarity(testGame1,testGame2,smallDf,pearson_sim)
-print 'database load test: ', db.get(testGame1,testGame2)
-print "For user", testuser, "top rated games are:" 
-gameRecs=get_user_top_choices(testuser, smallDf)['gameName'].values
-print gameRecs
+# #define some variables for function testing
+# testGame1='Mage Wars'
+# testGame2='Terra Mystica'
+# testuser="m4c14s"
+# print 'the database and this function should return the same values'
+# print calculate_similarity(testGame1,testGame2,smallDf,pearson_sim)
+# print 'database load test: ', db.get(testGame1,testGame2)
+# print "For user", testuser, "top rated games are:" 
+# gameRecs=get_user_top_choices(testuser, smallDf)['gameName'].values
+# print gameRecs
 
 
-print "\nFor user", testuser, "the top recommendations are:"
-toprecos=get_top_recos_for_user(testuser, smallDf, db, n=5, k=7)
-for gameName, gameRating in toprecos:
-    print gameName, '| aveRating:',gameRating
+# print "\nFor user", testuser, "the top recommendations are:"
+# toprecos=get_top_recos_for_user(testuser, smallDf, db, n=5, k=7)
+# for gameName, gameRating in toprecos:
+#     print gameName, '| aveRating:',gameRating
 
-print "\nfor user",testuser, 'avg', smallDf[smallDf.user==testuser].rating.mean() 
-for game in gameRecs:
-    print "----------------------------------"
-    print game
-    print "Predicted Rating:",ratingPredictor(smallDf, db, game, testuser, k=7, reg=1000.) 
-    u,a=get_other_ratings(game, testuser, smallDf)
-    print "Actual User Rating:",u,"Avg Rating",a
+# print "\nfor user",testuser, 'avg', smallDf[smallDf.user==testuser].rating.mean() 
+# for game in gameRecs:
+#     print "----------------------------------"
+#     print game
+#     print "Predicted Rating:",ratingPredictor(smallDf, db, game, testuser, k=7, reg=1000.) 
+#     u,a=get_other_ratings(game, testuser, smallDf)
+#     print "Actual User Rating:",u,"Avg Rating",a
 
 

@@ -6,7 +6,8 @@ import numpy as np
 import os
 import re
 import pickle
-
+from collections import defaultdict
+import operator
 
 
 
@@ -87,7 +88,7 @@ def buildReviewDfForGame(gameID):
     else:
         return None
 
-#get list of top 100 boardgames and ID numbers
+#get list of top 100 boardgames by rating and their ID numbers
 def getListOfTop100Games():
     url='http://boardgamegeek.com/browse/boardgame'
     page = requests.get(url).text
@@ -146,14 +147,14 @@ def getGamesToAddFromPage(pageNum, alreadyDownloadedIds):
 def scrapeGamePages(gameID):
     url='http://boardgamegeek.com/boardgame/%s/%s' % (gameID[0],gameID[1])
     page = requests.get(url).text
-    filepath='google_drive/game_metadata/%s_%s.txt' % (gameID[0],gameID[1])
+    filepath='google_drive/game_pages/%s_%s.txt' % (gameID[0],gameID[1])
     with open(filepath, 'w') as fout:
         fout.write(page.encode("utf-8"))
 
 #provided with a gameID tuple (IDnumber, name), check whether the game site is saved already and return the page DOM 
 def getSavedGameSite(gameID):
     try:
-        fin=open('google_drive/game_metadata/%s_%s.txt'% (gameID[0],gameID[1]), 'r')
+        fin=open('google_drive/game_pages/%s_%s.txt'% (gameID[0],gameID[1]), 'r')
         dom=web.Element(fin.read())
         return dom
     except:
@@ -168,27 +169,43 @@ def getListOfGameRatingsAlreadyScraped():
     scrapedGames=[(filen.split('_')[2],filen.split('_')[3]) for filen in fileList]
     return scrapedGames
 
-def buildDictOfAllGameFeatures(gameRatingsAlreadyScraped,gameFeaturesDict):
-    allFeaturesDict={'boardgamemechanic':set(),'boardgamepublisher':set(),
-                    'boardgamedesigner':set(),'boardgamesubdomain':set(),
-                    'boardgamecategory':set(),}
-    for gameID in gameRatingsAlreadyScraped:
+#Looks in the gameRatings directory and returns a list of gameID tuples (IDnumber,name) for which there are ratings files
+def getListOfIdsGamePagesAlreadySaved():
+    dirname='google_drive/game_pages/'
+    fileList=os.listdir(dirname)
+    scrapedGames=[filen.split('_')[0] for filen in fileList]
+    return scrapedGames
+
+#Pass a list of games in our dataset, the dictionary keyed by game and containing features, and a list of feature types/metadata tags we care about
+#Creates a dictionary keyed by tag/metadata type corresponding to sets of features in that type
+def buildDictOfAllGameFeatures(alreadyScrapedGames,gameFeaturesDict, featuresIncluded):
+    allFeaturesDict={feature:set() for feature in featuresIncluded}
+    for gameID in alreadyScrapedGames:
         gameFeatures=gameFeaturesDict[gameID]
-        for featureType in gameFeatures:
-            for feature in gameFeatures[featureType]:
-                allFeaturesDict[featureType].add(feature)
+        for featureType in featuresIncluded:
+            if type(gameFeatures[featureType])==int:
+                allFeaturesDict[featureType].add(gameFeatures[featureType])
+            else:
+                for feature in gameFeatures[featureType]:
+                    allFeaturesDict[featureType].add(feature)
     return allFeaturesDict
 
 
+
 #Takes a GameID, pulls up a downloaded HTML, and strips out features from the text
-#still need to add a way to strip the number of players, game time, etc. from the information
+#returns a dictionary keyed on feature type containing the feature values
 def getFeaturesFromSavedGamePage(gameID):
+    #opens the saved HTML page and pulls out the infoTable with the data we care about
     fin=open('google_drive/game_pages/%s_%s.txt'% (gameID[0],gameID[1]), 'r')
     dom=web.Element(fin.read())
     infoTable=dom.by_tag('.geekitem_infotable')[0]
+
     featuresDict={'boardgamemechanic':set(),'boardgamepublisher':set(),
                     'boardgamedesigner':set(),'boardgamesubdomain':set(),
-                    'boardgamecategory':set(),}
+                    'boardgamecategory':set(),'bestNumPlayers':set(),#'allowedNumPlayers':set(),
+                    'playTime':set()}
+    #Several of the features (mechanic, publisher, designer, subdomain, category) are coded in <a> tags with the info in the links
+    #Pull all of this data out                
     for link in infoTable('a'):
         try:
             row=link.attributes.get('href','').split('/')
@@ -199,39 +216,41 @@ def getFeaturesFromSavedGamePage(gameID):
                 featuresDict[featureType].add((featureID,featureName))
         except:
             pass
+    #Other data we care about is encoded in different ways- individually pull out each of those      
+    #Get manufacturer number of players    
+    # playerEntryString='#results_players_thing_'+gameID[0]
+    # for item in infoTable(playerEntryString):
+    #     rng=item.content.strip()
+    #     pRange=np.arange(int(rng[0]),int(rng[-1])+1)
+    #     featuresDict['allowedNumPlayers'].add(pRange)
+        
+    #get best number of players
+    bestNumPlayers=None
+
+    for item in infoTable('tr td div'):
+        hit=re.search('Best with (\d) ',item.content.strip())
+        if hit:
+            bestNumPlayers=hit.group(1)
+            labelString='bestNumPlayers'+str(bestNumPlayers)
+            featuresDict['bestNumPlayers'].add((labelString,bestNumPlayers))
+            print featuresDict['bestNumPlayers']
+            break
+    if not bestNumPlayers:
+        print gameID, '\nunable to find best number of players'
+            
+    #get the playing time for the game
+    timeEntryString='#results_playingtime_thing_'+gameID[0]
+    time=None
+    for item in infoTable(timeEntryString):
+        time=item.content.strip().split(' ')[0]
+        time=time.strip()
+        labelString='time'+str(time)
+        featuresDict['playTime'].add((labelString,time))
+        print featuresDict['playTime']
+    if not time:
+        print gameID, '\nunable to find best playingTime'    
+        
     return featuresDict
-
-
-#top100_IDs=getListOfTop100Games()
-#getTop100GameRatings(top100_IDs)
-
- ##########################################
-############## Feature analysis ##############
-##########################################
-
-#Get the game pages for the games for which ratings are already scraped
-gameRatingsAlreadyScraped=getListOfGameRatingsAlreadyScraped()
-
-#Get game metadata (features tages) from downloaded games
-#for gameID in gameRatingsAlreadyScraped:
-#    scrapeGamePages(gameID)
-
-# gameFeaturesDict=defaultdict(dict)
-# for i, gameID in enumerate(gameRatingsAlreadyScraped):
-#     print gameID, 'reading game', i,'out of',len(gameRatingsAlreadyScraped)
-#     gameFeaturesDict[gameID]=getFeaturesFromSavedGamePage(gameID)
-# with open('gameFeaturesDict','w') as fout:
-#     pickle.dump(gameFeaturesDict, fout)
-
-
-fin=open('google_drive/gameFeaturesDict','r')
-gameFeaturesDict=pickle.load(fin)
-allFeaturesDict=buildDictOfAllGameFeatures(gameRatingsAlreadyScraped,gameFeaturesDict)
-featureVector=[]
-for featureType in allFeaturesDict:
-    featureVector=featureVector+list(allFeaturesDict[featureType])
-print 'There are',len(featureVector),'features in the categories:\n', allFeaturesDict.keys()
-
 
 
 ## Build a dataframe containing 0s and 1s, rows are games, columns are game feature tags
@@ -239,54 +258,114 @@ print 'There are',len(featureVector),'features in the categories:\n', allFeature
 def buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped, gameFeaturesDict):
     getNameFromIDTuple=operator.itemgetter(1)
     getIDFromTuple=operator.itemgetter(0)
-    indices=map(getIDFromTuple,alreadyScrapedGames)
+    indices=map(getIDFromTuple,gameRatingsAlreadyScraped)
     cols=map(getNameFromIDTuple,featureVector)
     fDf = pd.DataFrame(0,index=indices, columns=cols)
 
-    for gameID in alreadyScrapedGames:
+    for gameID in gameRatingsAlreadyScraped:
         gameFeatures=gameFeaturesDict[gameID]
-        for featureType in gameFeatures:
+        for featureType in featuresToInclude:
             for feature in gameFeatures[featureType]:
                 f=str(getNameFromIDTuple(feature))
-             fDf.loc[gameID[0]][f]=1
 
+                fDf.loc[gameID[0]][f]=1
     return fDf
 
-# fDf=buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped,gameFeaturesDict)
+
+
+##########################################
+############## Download ratings data ##############
+##########################################
+#Get the ratings data for the top 100 rated games, merged with the set of the 1000 games with the most ratings
+
+#top100_IDs=getListOfTop100Games()
+#getTop100GameRatings(top100_IDs)
+
+# for pageNum in range(1,11):
+#     gamesToAdd=getGamesToAddFromPage(pageNum,gameRatingsAlreadyScraped)
+#     print 'adding games from page %s:' % pageNum
+#     for game in gamesToAdd:
+#         gameID=game[0]
+#         name=game[1]
+#         fileName='gamereviews_id_%s_%s.csv' % (gameID,name)
+#         print '\nDownloading data for %s, gameID: %s' % (name, gameID)
+#         gameDf=buildReviewDfForGame(gameID)
+#         if gameDf:
+#             print 'saving file: ', fileName
+#             gameDf.to_csv(fileName,index_label=False, encoding='utf8')
+#         else:
+#             print 'Error, not a game?'
+
+
+#Get the list of all of the games I have ratings for, and go to their pages to download the HTML to strip out metadata
+gameRatingsAlreadyScraped=getListOfGameRatingsAlreadyScraped()
+
+
+#Get game metadata (features tages) from downloaded games
+savedPages=getListOfIdsGamePagesAlreadySaved()
+for game in gameRatingsAlreadyScraped:
+    if game[0] not in savedPages:
+        print 'downloading HTML for: ', game
+        scrapeGamePages(game)
+
+
+ ##########################################
+############## Feature analysis ##############
+##########################################
+
+
+# gameFeaturesDict=defaultdict(dict)
+# for i, gameID in enumerate(gameRatingsAlreadyScraped):
+#     print gameID, 'Building features for', i,'out of',len(gameRatingsAlreadyScraped)
+#     gameFeaturesDict[gameID]=getFeaturesFromSavedGamePage(gameID)
+# with open('google_drive/gameFeaturesDict','w') as fout:
+#     pickle.dump(gameFeaturesDict, fout)
+
+
+fin=open('google_drive/gameFeaturesDict','r')
+gameFeaturesDict=pickle.load(fin)
+
+featuresToInclude=['boardgamecategory','boardgamesubdomain','boardgamepublisher','boardgamemechanic','playTime','bestNumPlayers']
+allFeaturesDict=buildDictOfAllGameFeatures(gameRatingsAlreadyScraped,gameFeaturesDict,featuresToInclude)
+featureVector=[]
+for featureType in featuresToInclude:
+    featureVector=featureVector+list(allFeaturesDict[featureType])
+print 'There are',len(featureVector),'features in the categories:\n', allFeaturesDict.keys()
+print allFeaturesDict
+fDf=buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped,gameFeaturesDict)
 
 
 ####Try out a linear regression on the features for games reviewed by a testuser
 #chose an alpha arbitrarily here
+#testuser='Mease19'
+testuser='nicodemus055'
+
 gamesReviewedByUser=smallDf[smallDf.user==testuser]
 xinds=gamesReviewedByUser.gameID.values
 xinds=[str(ind) for ind in xinds]
 x=fDf.loc[xinds]
 y=gamesReviewedByUser['rating'].values
 y=[[val] for val in y]
-clf = linear_model.Lasso(alpha = 0.05)
+clf = linear_model.Lasso(alpha = 0.015,fit_intercept=True)
 clf.fit(x,y)
 coefs=clf.coef_
-print clf.score(x,y)
+intc=clf.intercept_ 
+print clf.score(x,y), intc
 sum(abs(coefs)>0.01)
+######## Also, normalize Y to mean so the magnitude of coefficients is right.  Check number of coefs- do I have an intercept here?
+
+#sort the features in descending order by highest absolute value of the coefs, take those with coefs>0.01
+usefulFeatureInds=abs(coefs)>0.01
+numUsefulFeatures=sum(usefulFeatureInds)
+print 'Number of useful features',numUsefulFeatures
+sortedInds=np.argsort(abs(coefs))[::-1][0:numUsefulFeatures]
+print 'intercept:',intc,'\ncoefs', coefs[sortedInds]
+for ind in sortedInds: 
+    print featureVector[ind],coefs[ind]
 
 
 
 
-
-for pageNum in range(4):
-    gamesToAdd=getGamesToAddFromPage(pageNum,gameRatingsAlreadyScraped)
-    print 'adding games from page %s:' % pageNum
-    for game in gamesToAdd:
-        gameID=game[0]
-        name=game[1]
-        fileName='gamereviews_id_%s_%s.csv' % (gameID,name)
-        print '\nDownloading data for %s, gameID: %s' % (name, gameID)
-        gameDf=buildReviewDfForGame(gameID)
-        if gameDf:
-            print 'saving file: ', fileName
-            gameDf.to_csv(fileName,index_label=False, encoding='utf8')
-        else:
-            print 'Error, not a game?'
 
 
 
