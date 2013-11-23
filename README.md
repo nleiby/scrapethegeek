@@ -18,7 +18,6 @@ Use a dummy account login: recommendTheGeek pass: geekscraper to query other peo
 
 ###Small To Do
 
-Modify function getFeaturesFromSavedGamePage, adding a way to strip the number of players, game time, etc. from the information- right now only taking out features encoded in links
 
 ###Network analysis of boardgame neighborhoods
 Make a network graph showing the user’s rated boardgames in red and recommended boardgames in blue.  Make it interactive- mouse-over a node to show game details, why it’s recommended
