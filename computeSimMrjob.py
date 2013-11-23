@@ -1,4 +1,4 @@
-## Takes a CSV file containing user reviews and returns a tuple (rho, cosSim, n_common) for pairs of games
+## Takes a CSV file containing user reviews and returns a tuple (rho,  n_common) for pairs of games
 
 import numpy as np
 from mrjob.job import MRJob

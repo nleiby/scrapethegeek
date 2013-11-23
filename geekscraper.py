@@ -272,6 +272,28 @@ def buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped, gameFeaturesDic
     return fDf
 
 
+#Given a list of games in our dataset, ask if I've already got the thumbnail for it,
+#If not, open the text file with the saved HTML from the game profile page and extract the thumburl
+#then download that thumbnail URL using the pattern.web module
+def downloadThumbnailsForGames(alreadyScrapedGames):
+    downloadedImages=os.listdir('google_drive/game_thumbnails/')
+    for game in alreadyScrapedGames:
+        gameString=game[0]+"_"+game[1]+'.jpg'
+        if gameString not in downloadedImages:
+            print 'downloading thumbnail for',game
+            #open the saved html and pull the imgLink out of the nested divs
+            with open('google_drive/game_pages/%s_%s.txt'% (game[0],game[1]), 'r') as fin:
+                dom=web.Element(fin.read())
+                for item in dom.by_tag('div.mt5'):
+                    for subItem in item('link'):
+                        imgLink=subItem.attributes.get('href','')
+                        #download the file as the variable im, and then specify the output path and save
+                        im=web.URL(imgLink).download(user_agent='Mozilla/5.0')
+                        imageFilePath='google_drive/game_thumbnails/%s_%s.jpg' %(game[0],game[1])
+                        with open(imageFilePath,'w') as fout:
+                            fout.write(im)
+
+
 
 ##########################################
 ############## Download ratings data ##############
@@ -300,6 +322,8 @@ def buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped, gameFeaturesDic
 #Get the list of all of the games I have ratings for, and go to their pages to download the HTML to strip out metadata
 gameRatingsAlreadyScraped=getListOfGameRatingsAlreadyScraped()
 
+#Download the thumbnail images for games in our data set that have not yet been downloaded
+downloadThumbnailsForGames(gameRatingsAlreadyScraped)
 
 #Get game metadata (features tages) from downloaded games
 savedPages=getListOfIdsGamePagesAlreadySaved()
@@ -308,60 +332,6 @@ for game in gameRatingsAlreadyScraped:
         print 'downloading HTML for: ', game
         scrapeGamePages(game)
 
-
- ##########################################
-############## Feature analysis ##############
-##########################################
-
-
-# gameFeaturesDict=defaultdict(dict)
-# for i, gameID in enumerate(gameRatingsAlreadyScraped):
-#     print gameID, 'Building features for', i,'out of',len(gameRatingsAlreadyScraped)
-#     gameFeaturesDict[gameID]=getFeaturesFromSavedGamePage(gameID)
-# with open('google_drive/gameFeaturesDict','w') as fout:
-#     pickle.dump(gameFeaturesDict, fout)
-
-
-fin=open('google_drive/gameFeaturesDict','r')
-gameFeaturesDict=pickle.load(fin)
-
-featuresToInclude=['boardgamecategory','boardgamesubdomain','boardgamepublisher','boardgamemechanic','playTime','bestNumPlayers']
-allFeaturesDict=buildDictOfAllGameFeatures(gameRatingsAlreadyScraped,gameFeaturesDict,featuresToInclude)
-featureVector=[]
-for featureType in featuresToInclude:
-    featureVector=featureVector+list(allFeaturesDict[featureType])
-print 'There are',len(featureVector),'features in the categories:\n', allFeaturesDict.keys()
-print allFeaturesDict
-fDf=buildGameFeaturesDf(featureVector,gameRatingsAlreadyScraped,gameFeaturesDict)
-
-
-####Try out a linear regression on the features for games reviewed by a testuser
-#chose an alpha arbitrarily here
-#testuser='Mease19'
-testuser='nicodemus055'
-
-gamesReviewedByUser=smallDf[smallDf.user==testuser]
-xinds=gamesReviewedByUser.gameID.values
-xinds=[str(ind) for ind in xinds]
-x=fDf.loc[xinds]
-y=gamesReviewedByUser['rating'].values
-y=[[val] for val in y]
-clf = linear_model.Lasso(alpha = 0.015,fit_intercept=True)
-clf.fit(x,y)
-coefs=clf.coef_
-intc=clf.intercept_ 
-print clf.score(x,y), intc
-sum(abs(coefs)>0.01)
-######## Also, normalize Y to mean so the magnitude of coefficients is right.  Check number of coefs- do I have an intercept here?
-
-#sort the features in descending order by highest absolute value of the coefs, take those with coefs>0.01
-usefulFeatureInds=abs(coefs)>0.01
-numUsefulFeatures=sum(usefulFeatureInds)
-print 'Number of useful features',numUsefulFeatures
-sortedInds=np.argsort(abs(coefs))[::-1][0:numUsefulFeatures]
-print 'intercept:',intc,'\ncoefs', coefs[sortedInds]
-for ind in sortedInds: 
-    print featureVector[ind],coefs[ind]
 
 
 
